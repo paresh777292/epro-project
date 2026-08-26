@@ -17,7 +17,6 @@ if (!$user_id && isset($conn)) {
         $user_id = intval($u_row['id']);
     }
 }
-?>
 
 // Agar session me user nahi hai, toh database se pehla valid user id fetch karein
 if (!$user_id && isset($conn)) {
