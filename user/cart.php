@@ -8,7 +8,7 @@ if (file_exists(__DIR__ . '/../db_connect.php')) {
     include __DIR__ . '/../db_connect.php';
 }
 if (file_exists(__DIR__ . '/../config.php')) {
-    include __DIR__ . '/../config.php';
+   require_once __DIR__ . '/../db_connect.php';
 }
 if (file_exists(__DIR__ . '/../includes/auth.php')) {
     include __DIR__ . '/../includes/auth.php';
