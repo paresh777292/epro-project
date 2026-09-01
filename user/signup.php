@@ -18,35 +18,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['signup'])) {
 
     if (!empty($name) && !empty($email) && !empty($password)) {
         if (isset($conn) && $conn) {
-            $name_clean  = mysqli_real_escape_string($conn, $name);
-            $email_clean = mysqli_real_escape_string($conn, $email);
-            $pass_clean  = mysqli_real_escape_string($conn, $password);
-
-            // 1. Check if email already exists
-            $check = mysqli_query($conn, "SELECT id FROM users WHERE email = '$email_clean' LIMIT 1");
-
-            if ($check && mysqli_num_rows($check) > 0) {
-                $error = "Yeh email pehle se registered hai! Login karein.";
+            // Validate email format
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $error = "Invalid email format!";
             } else {
-                // 2. Insert into users without mobile
-                $sql = "INSERT INTO `users` (`name`, `email`, `password`) VALUES ('$name_clean', '$email_clean', '$pass_clean')";
-                
-                if (mysqli_query($conn, $sql)) {
-                    $_SESSION['user_id']    = mysqli_insert_id($conn);
-                    $_SESSION['user_name']  = $name;
-                    $_SESSION['user_email'] = $email;
-                    
-                    header("Location: products.php");
-                    exit();
+                // 1. Check if email already exists (SECURE - prepared statement)
+                $check_stmt = $conn->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
+                $check_stmt->bind_param("s", $email);
+                $check_stmt->execute();
+                $check_result = $check_stmt->get_result();
+
+                if ($check_result && $check_result->num_rows > 0) {
+                    $error = "This email is already registered!" ;
                 } else {
-                    $error = "Registration Error: " . mysqli_error($conn);
+                    // 2. Insert into users (SECURE - prepared statement)
+                    $insert_stmt = $conn->prepare(
+                        "INSERT INTO users (name, email, password) VALUES (?, ?, ?)"
+                    );
+                    
+                    if (!$insert_stmt) {
+                        $error = "Database error. Please try again.";
+                    } else {
+                        $insert_stmt->bind_param("sss", $name, $email, $password);
+                        
+                        if ($insert_stmt->execute()) {
+                            $user_id = $insert_stmt->insert_id;
+                            $_SESSION['user_id']    = $user_id;
+                            $_SESSION['user_name']  = $name;
+                            $_SESSION['user_email'] = $email;
+                            
+                            $insert_stmt->close();
+                            header("Location: products.php");
+                            exit();
+                        } else {
+                            $error = "Registration Error. Please try with a different email.";
+                            error_log("Signup SQL Error: " . $insert_stmt->error);
+                        }
+                        $insert_stmt->close();
+                    }
                 }
+                $check_stmt->close();
             }
         } else {
-            $error = "Database connect nahi ho paya!";
+            $error = "Database cannot be connected!";
         }
     } else {
-        $error = "Kripya sabhi fields bharein!";
+        $error = "Please fill in all fields!";
     }
 }
 ?>

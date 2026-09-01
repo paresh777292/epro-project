@@ -1,18 +1,15 @@
+/* Base & Background */
 body {
-    font-family: Arial;
+    font-family: Arial, sans-serif;
     margin: 0;
     padding: 0;
     background: #f2f2f2;
-
-}
-body {
     background-image: url('../assets/images/background.png');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
     background-attachment: fixed;
 }
-
 
 header {
     background: #222;
@@ -36,4 +33,64 @@ button {
     background: #28a745;
     color: white;
     border: none;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+/* =========================================
+   Floating Wishlist / Heart Button Styles
+   ========================================= */
+
+.product-image-wrapper {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    border-radius: 8px;
+}
+
+.product-image-wrapper img {
+    width: 100%;
+    height: auto;
+    display: block;
+    object-fit: cover;
+}
+
+/* White Circular Heart Button */
+.wishlist-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 36px;
+    height: 36px;
+    background: #ffffff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    padding: 0;
+    z-index: 5;
+}
+
+.wishlist-btn:hover {
+    transform: scale(1.12);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
+}
+
+.wishlist-btn svg {
+    width: 18px;
+    height: 18px;
+    stroke: #334155;
+    fill: none;
+    stroke-width: 2;
+    transition: all 0.2s ease;
+}
+
+/* Red Fill when Liked / Active */
+.wishlist-btn.active svg {
+    fill: #ef4444;
+    stroke: #ef4444;
 }

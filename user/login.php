@@ -14,25 +14,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     $password = trim($_POST['password']);
 
     if (!empty($email) && !empty($password)) {
-        $email_clean = mysqli_real_escape_string($conn, $email);
-        $res = mysqli_query($conn, "SELECT * FROM users WHERE email = '$email_clean' LIMIT 1");
-
-        if ($res && mysqli_num_rows($res) > 0) {
-            $user = mysqli_fetch_assoc($res);
-            if ($password === $user['password']) {
-                $_SESSION['user_id'] = $user['id'];
-                $_SESSION['user_name'] = $user['name'];
-                $_SESSION['user_email'] = $user['email'];
-                header("Location: products.php");
-                exit();
-            } else {
-                $error = "Galat Password!";
-            }
+        // Validate email format
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $error = "Invalid email format!";
         } else {
-            $error = "Yeh email account register nahi hai!";
+            // Use prepared statement for secure query (SECURE)
+            $stmt = $conn->prepare("SELECT id, name, email, password FROM users WHERE email = ? LIMIT 1");
+            
+            if (!$stmt) {
+                $error = "Database error. Please try again.";
+            } else {
+                $stmt->bind_param("s", $email);
+                $stmt->execute();
+                $res = $stmt->get_result();
+
+                if ($res && $res->num_rows > 0) {
+                    $user = $res->fetch_assoc();
+                    if ($password === $user['password']) {
+                        $_SESSION['user_id'] = $user['id'];
+                        $_SESSION['user_name'] = $user['name'];
+                        $_SESSION['user_email'] = $user['email'];
+                        header("Location: products.php");
+                        exit();
+                    } else {
+                        $error = "wrong Password!";
+                    }
+                } else {
+                    $error = "this is email account is not registered!";
+                }
+                $stmt->close();
+            }
         }
     } else {
-        $error = "Sabhi fields bharein!";
+        $error = "Please fill in all fields!";
     }
 }
 ?>

@@ -103,3 +103,65 @@ function selectMethod(type) {
         codBox.style.display = type === "cod" ? "block" : "none";
     }
 }
+
+/**
+ * 7. Universal Wishlist / Heart Toggle Handler (Supports FontAwesome & SVG)
+ */
+function toggleHeart(btn, productId) {
+    // 1. Button active class toggle
+    btn.classList.toggle("active");
+
+    // 2. FontAwesome Icon Switching (fa-regular <-> fa-solid)
+    const icon = btn.querySelector("i");
+    if (icon) {
+        if (btn.classList.contains("active")) {
+            icon.classList.remove("fa-regular");
+            icon.classList.add("fa-solid");
+        } else {
+            icon.classList.remove("fa-solid");
+            icon.classList.add("fa-regular");
+        }
+    }
+
+    // 3. Smooth Pop/Bounce Effect
+    btn.style.transform = "scale(1.25)";
+    setTimeout(() => {
+        btn.style.transform = "";
+    }, 200);
+
+    // 4. Dynamic Path Detection (Root vs Subfolder)
+    const isInsideUserFolder = window.location.pathname.includes("/user/");
+    const targetUrl = isInsideUserFolder ? "../like_dislike.php" : "like_dislike.php";
+
+    const formData = new FormData();
+    formData.append("product_id", productId);
+    formData.append("action", "like");
+
+    // 5. Background AJAX Call
+    fetch(targetUrl, {
+        method: "POST",
+        body: formData
+    })
+    .then((response) => response.json())
+    .then((data) => {
+        if (data.status !== "success") {
+            // Revert state if backend error occurs
+            btn.classList.toggle("active");
+            if (icon) {
+                icon.classList.toggle("fa-solid");
+                icon.classList.toggle("fa-regular");
+            }
+        }
+    })
+    .catch((error) => {
+        console.error("Wishlist toggle failed:", error);
+        btn.classList.toggle("active");
+        if (icon) {
+            icon.classList.toggle("fa-solid");
+            icon.classList.toggle("fa-regular");
+        }
+    });
+}
+
+// Alias to ensure toggleLike also calls toggleHeart
+const toggleLike = toggleHeart;

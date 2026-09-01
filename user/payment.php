@@ -1,168 +1,256 @@
-<?php
-if (session_status() == PHP_SESSION_NONE) {
-    session_start();
-}
+<!-- Payment Method Container -->
+<div class="payment-card-box">
+    <div class="payment-header">
+        <i class="fa-solid fa-credit-card"></i> Payment Method
+    </div>
 
-// Database Connection
-if (file_exists('../db_connect.php')) {
-    include '../db_connect.php';
-} elseif (file_exists('../config.php')) {
-    include '../config.php';
-}
+    <!-- Dynamic Amount & UPI Info -->
+    <div class="upi-container">
+        <p class="scan-text">Scan QR code with any UPI App or choose direct payment</p>
 
-$user_id = null;
-if (isset($_SESSION['user_id']) && !empty($_SESSION['user_id'])) {
-    $user_id = intval($_SESSION['user_id']);
-} elseif (isset($_SESSION['id']) && !empty($_SESSION['id'])) {
-    $user_id = intval($_SESSION['id']);
-}
-
-// Cart Total Fetch
-$total_bill = 0;
-$cart_items = [];
-
-if (isset($conn) && $conn) {
-    if ($user_id) {
-        $cart_query = "SELECT c.quantity, p.name, p.price FROM cart c JOIN products p ON c.product_id = p.id WHERE c.user_id = '$user_id'";
-    } else {
-        $cart_query = "SELECT c.quantity, p.name, p.price FROM cart c JOIN products p ON c.product_id = p.id WHERE c.user_id IS NULL";
-    }
-    
-    $cart_res = mysqli_query($conn, $cart_query);
-    if ($cart_res && mysqli_num_rows($cart_res) > 0) {
-        while ($row = mysqli_fetch_assoc($cart_res)) {
-            $cart_items[] = $row;
-            $total_bill += ($row['price'] * $row['quantity']);
-        }
-    }
-}
-
-$order_success = false;
-$error_msg = "";
-
-// PAYMENT SUBMIT LOGIC -> INSERT INTO ORDERS (With Explicit order_date for Sales Graph)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pay_now'])) {
-    if ($total_bill > 0 && isset($conn) && $conn) {
-        $payment_method = mysqli_real_escape_string($conn, $_POST['payment_method'] ?? 'Online');
-        $uid_val = $user_id ? "'$user_id'" : "NULL";
-        
-        // 1. Insert Order with Explicit Timestamp for Sales Graph Accuracy
-        $insert_order = "INSERT INTO `orders` (`user_id`, `total_amount`, `payment_method`, `order_date`) 
-                        VALUES ($uid_val, '$total_bill', '$payment_method', NOW())";
-        
-        if (mysqli_query($conn, $insert_order)) {
-            // 2. Clear Cart after successful order insert
-            if ($user_id) {
-                mysqli_query($conn, "DELETE FROM `cart` WHERE `user_id` = '$user_id'");
-            } else {
-                mysqli_query($conn, "DELETE FROM `cart` WHERE `user_id` IS NULL");
-            }
-            $order_success = true;
-        } else {
-            $error_msg = "Order save karne mein error aaya: " . mysqli_error($conn);
-        }
-    }
-}
-
-if ($total_bill <= 0 && !$order_success) {
-    header("Location: cart.php");
-    exit();
-}
-?>
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Checkout & Payment - EPRO</title>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        * { margin:0; padding:0; box-sizing:border-box; font-family:'Poppins', sans-serif; }
-        body { background:#0f172a; color:#f8fafc; min-height:100vh; padding:30px 20px; }
-        .payment-container { max-width:650px; margin:auto; background:rgba(30,41,59,0.7); backdrop-filter:blur(16px); border:1px solid rgba(255,255,255,0.1); border-radius:18px; padding:30px; box-shadow:0 15px 35px rgba(0,0,0,0.4); }
-        h2 { text-align:center; margin-bottom:20px; background:linear-gradient(90deg, #38bdf8, #818cf8); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
-        .summary-box { background:rgba(15,23,42,0.8); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:18px; margin-bottom:25px; }
-        .summary-row { display:flex; justify-content:space-between; margin:8px 0; font-size:14px; color:#cbd5e1; }
-        .total-amount { font-size:18px; font-weight:700; color:#34d399; border-top:1px solid rgba(255,255,255,0.1); padding-top:10px; margin-top:10px; }
-        .method-card { border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:14px; margin-bottom:12px; cursor:pointer; display:flex; align-items:center; background:rgba(15,23,42,0.5); transition:0.2s; }
-        .method-card:hover { border-color:#38bdf8; background:rgba(56,189,248,0.1); }
-        .method-card input { margin-right:12px; transform:scale(1.2); }
-        .method-card label { font-weight:600; cursor:pointer; width:100%; display:flex; justify-content:space-between; }
-        .method-details { display:none; padding:15px; background:rgba(15,23,42,0.8); border:1px solid rgba(255,255,255,0.08); border-radius:10px; margin-top:-6px; margin-bottom:15px; }
-        .input-field { width:100%; padding:10px; background:#1e293b; border:1px solid rgba(255,255,255,0.15); border-radius:8px; color:white; margin-top:8px; outline:none; }
-        .input-field:focus { border-color:#38bdf8; }
-        .qr-box { text-align:center; padding:10px; }
-        .qr-box img { width:140px; height:140px; border-radius:8px; border:2px solid rgba(255,255,255,0.2); }
-        .btn-submit { width:100%; background:linear-gradient(135deg, #22c55e, #16a34a); color:white; border:none; padding:14px; border-radius:10px; font-size:16px; font-weight:600; cursor:pointer; margin-top:15px; }
-        .btn-submit:hover { opacity:0.9; }
-        .back-link { display:block; text-align:center; margin-top:15px; text-decoration:none; color:#38bdf8; font-size:13px; }
-        .success-card { text-align:center; padding:30px 10px; }
-        .success-icon { font-size:60px; color:#34d399; margin-bottom:15px; }
-        .error-alert { background:rgba(244,63,94,0.2); border:1px solid #f43f5e; color:#fda4af; padding:12px; border-radius:8px; margin-bottom:15px; text-align:center; font-size:13px; }
-    </style>
-</head>
-<body>
-
-<div class="payment-container">
-    <?php if ($order_success): ?>
-        <div class="success-card">
-            <div class="success-icon"><i class="fa-solid fa-circle-check"></i></div>
-            <h2>Payment Successful!</h2>
-            <p style="color:#cbd5e1; margin-top:5px;">Order has been placed and live sales graph is updated.</p>
-            <br>
-            <a href="products.php" class="btn-submit" style="display:inline-block; width:auto; text-decoration:none; padding:10px 25px;">Continue Shopping</a>
-        </div>
-    <?php else: ?>
-        <h2>Choose Payment Method</h2>
-
-        <?php if (!empty($error_msg)): ?>
-            <div class="error-alert"><?php echo $error_msg; ?></div>
-        <?php endif; ?>
-
-        <div class="summary-box">
-            <div class="summary-row"><span>Total Cart Items:</span> <b><?php echo count($cart_items); ?></b></div>
-            <div class="summary-row total-amount"><span>Total Payable:</span> <span>₹<?php echo number_format($total_bill, 2); ?></span></div>
+        <!-- Dynamic QR Code (Auto-generates from amount) -->
+        <div class="qr-wrapper" id="qrWrapperBox">
+            <?php 
+                $upi_id = "eprostore@okhdfcbank"; // Yahan apna UPI ID dalein
+                $order_amount = isset($total_amount) ? (float)$total_amount : 34290.00;
+                $upi_string = "upi://pay?pa=" . urlencode($upi_id) . "&pn=" . urlencode("E-PRO Store") . "&am=" . number_format($order_amount, 2, '.', '') . "&cu=INR&tn=" . urlencode("Order Payment");
+                $qr_url = "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=" . urlencode($upi_string);
+            ?>
+            <img 
+                src="<?php echo $qr_url; ?>" 
+                alt="UPI QR Code" 
+                class="qr-code-img"
+                onerror="this.onerror=null; this.src='https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=upi://pay?pa=<?php echo $upi_id; ?>';"
+            >
         </div>
 
-        <form method="POST" action="">
-            <div class="method-card" onclick="selectMethod('gpay')">
-                <input type="radio" id="gpay" name="payment_method" value="Google Pay / UPI" checked>
-                <label for="gpay"><span>Google Pay / PhonePe / Paytm</span><span style="color:#38bdf8;">UPI Fast</span></label>
-            </div>
-            <div id="gpay_details" class="method-details" style="display:block;">
-                <label style="font-size:12px; color:#94a3b8;">Enter UPI ID:</label>
-                <input type="text" class="input-field" placeholder="username@okhdfcbank">
-                <div class="qr-box">
-                    <p style="margin:10px 0 5px 0; font-size:12px; color:#94a3b8;">Or Scan QR code to pay:</p>
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=upi://pay?pa=store@upi%26pn=EProStore%26am=<?php echo $total_bill; ?>%26cu=INR" alt="QR">
-                </div>
-            </div>
+        <div class="amount-display">
+            Amount: <span class="amount-val">₹<?php echo number_format($order_amount, 2); ?></span>
+        </div>
 
-            <div class="method-card" onclick="selectMethod('cod')">
-                <input type="radio" id="cod" name="payment_method" value="Cash On Delivery">
-                <label for="cod"><span>Cash on Delivery (COD)</span><span>Doorstep</span></label>
-            </div>
-            <div id="cod_details" class="method-details">
-                <p style="font-size:13px; color:#94a3b8; margin:0;">Pay cash to delivery partner on arrival.</p>
-            </div>
+        <!-- Copy UPI ID Pill -->
+        <div class="upi-id-pill" onclick="copyUpiId('<?php echo $upi_id; ?>')">
+            <span>UPI ID: <strong><?php echo $upi_id; ?></strong></span>
+            <i class="fa-regular fa-copy" title="Copy UPI ID"></i>
+        </div>
 
-            <button type="submit" name="pay_now" class="btn-submit">Confirm & Pay ₹<?php echo number_format($total_bill, 2); ?></button>
-            <a href="cart.php" class="back-link">← Back to Cart</a>
-        </form>
-    <?php endif; ?>
+        <!-- Direct UPI Apps Section -->
+        <div class="upi-apps-title">Pay Directly via App (Mobile Only):</div>
+        <div class="upi-apps-grid">
+            <!-- Google Pay -->
+            <button type="button" class="app-btn gpay-btn" onclick="openUpiApp('gpay')">
+                <i class="fa-brands fa-google-pay"></i> GPay
+            </button>
+
+            <!-- PhonePe -->
+            <button type="button" class="app-btn phonepe-btn" onclick="openUpiApp('phonepe')">
+                <i class="fa-solid fa-mobile-screen-button"></i> PhonePe
+            </button>
+
+            <!-- Paytm -->
+            <button type="button" class="app-btn paytm-btn" onclick="openUpiApp('paytm')">
+                <i class="fa-solid fa-wallet"></i> Paytm
+            </button>
+
+            <!-- Any UPI -->
+            <button type="button" class="app-btn any-upi-btn" onclick="openUpiApp('upi')">
+                <i class="fa-solid fa-bolt"></i> Any UPI
+            </button>
+        </div>
+    </div>
 </div>
 
+<style>
+/* Payment Box Glassmorphism Styling */
+.payment-card-box {
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    border-radius: 18px;
+    padding: 24px;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 10px 35px rgba(0, 0, 0, 0.35);
+    margin: 20px auto;
+    max-width: 480px;
+    color: #f8fafc;
+}
+
+.payment-header {
+    font-size: 20px;
+    font-weight: 700;
+    color: #38bdf8;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 12px;
+}
+
+.upi-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.scan-text {
+    font-size: 13px;
+    color: #94a3b8;
+    margin-bottom: 16px;
+}
+
+/* QR Code Container with Neon Glow */
+.qr-wrapper {
+    background: #ffffff;
+    padding: 12px;
+    border-radius: 16px;
+    box-shadow: 0 0 25px rgba(56, 189, 248, 0.25);
+    display: inline-block;
+    margin-bottom: 16px;
+    transition: all 0.3s ease;
+}
+
+.qr-code-img {
+    width: 180px;
+    height: 180px;
+    display: block;
+    border-radius: 8px;
+}
+
+.amount-display {
+    font-size: 15px;
+    color: #cbd5e1;
+    margin-bottom: 12px;
+}
+
+.amount-val {
+    font-size: 20px;
+    font-weight: 800;
+    color: #34d399;
+}
+
+/* Copyable UPI Pill */
+.upi-id-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    color: #38bdf8;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: 20px;
+}
+
+.upi-id-pill:hover {
+    background: rgba(56, 189, 248, 0.15);
+    transform: scale(1.03);
+}
+
+.upi-apps-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* UPI Apps Grid */
+.upi-apps-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    width: 100%;
+}
+
+.app-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    text-decoration: none;
+    color: white;
+    border: none;
+    cursor: pointer;
+    outline: none;
+    transition: transform 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    width: 100%;
+}
+
+.gpay-btn {
+    background: linear-gradient(135deg, #1a73e8, #4285f4);
+    font-size: 14px;
+}
+.phonepe-btn {
+    background: linear-gradient(135deg, #5f259f, #7c3aed);
+}
+.paytm-btn {
+    background: linear-gradient(135deg, #00b9f1, #0284c7);
+}
+.any-upi-btn {
+    background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.app-btn:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.1);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.app-btn:active {
+    transform: translateY(0);
+}
+</style>
+
 <script>
-function selectMethod(type) {
-    document.getElementById(type).checked = true;
-    document.getElementById('gpay_details').style.display = (type === 'gpay') ? 'block' : 'none';
-    document.getElementById('cod_details').style.display = (type === 'cod') ? 'block' : 'none';
+function openUpiApp(app) {
+    const upiString = "<?php echo addslashes($upi_string); ?>";
+    
+    // Check if user is on a mobile device
+    const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    if (isMobile) {
+        // Mobile browser directly triggers the UPI application
+        window.location.href = upiString;
+    } else {
+        // Desktop browsers cannot handle upi:// intents directly
+        if (typeof showToast === 'function') {
+            showToast('UPI Apps are available on mobile phones. Please scan the QR code above to pay!', 'info');
+        } else {
+            alert('UPI Apps (GPay, PhonePe, Paytm) are open only on mobile device .\n\n please scan the QR code above to pay.');
+        }
+
+        // Highlight QR Code
+        const qrBox = document.getElementById('qrWrapperBox');
+        if (qrBox) {
+            qrBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            qrBox.style.boxShadow = '0 0 35px #38bdf8';
+            setTimeout(() => {
+                qrBox.style.boxShadow = '0 0 25px rgba(56, 189, 248, 0.25)';
+            }, 2000);
+        }
+    }
+}
+
+function copyUpiId(upiId) {
+    navigator.clipboard.writeText(upiId).then(() => {
+        if (typeof showToast === 'function') {
+            showToast('UPI ID copied: ' + upiId, 'success');
+        } else {
+            alert('UPI ID copied to clipboard: ' + upiId);
+        }
+    }).catch(err => {
+        console.error('Copy failed: ', err);
+    });
 }
 </script>
-<script src="../assets/js/script.js"></script>
-<!-- index.php ke liye: <script src="assets/js/script.js"></script> -->
-</body>
-
-</html>

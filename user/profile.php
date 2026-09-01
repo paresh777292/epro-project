@@ -1,17 +1,33 @@
 <?php
-session_start();
-include("../config.php");
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+include("../db_connect.php");
 
 // Check if user is actually logged in
-if (!isset($_SESSION['user'])) {
+if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit();
 }
 
-// Fetch full user details from database using the session email
-$email = $_SESSION['user'];
-$query = mysqli_query($conn, "SELECT * FROM users WHERE email='$email'");
-$user = mysqli_fetch_assoc($query);
+// Fetch full user details from database using user_id (SECURE - prepared statement)
+// Note: phone column doesn't exist yet in users table
+$user_id = $_SESSION['user_id'];
+$query_stmt = $conn->prepare("SELECT id, name, email, created_at FROM users WHERE id = ?");
+$query_stmt->bind_param("i", $user_id);
+$query_stmt->execute();
+$query_result = $query_stmt->get_result();
+
+if ($query_result->num_rows === 0) {
+    $_SESSION = [];
+    session_destroy();
+    header("Location: login.php");
+    exit();
+}
+
+$user = $query_result->fetch_assoc();
+$query_stmt->close();
 ?>
 
 <!DOCTYPE html>

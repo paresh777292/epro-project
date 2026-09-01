@@ -10,54 +10,74 @@ require_once __DIR__ . '/../db_connect.php';
 
 $user_id = $_SESSION['user_id'] ?? $_SESSION['id'] ?? null;
 
-// 1. PRODUCT ADD LOGIC (Direct query handling)
+// 1. PRODUCT ADD LOGIC (SECURE - prepared statement)
 if (isset($_GET['add']) && isset($conn)) {
     $p_id = intval($_GET['add']);
     
     if ($p_id > 0) {
-        $check_query = $user_id 
-            ? "SELECT id, quantity FROM cart WHERE user_id='$user_id' AND product_id='$p_id'"
-            : "SELECT id, quantity FROM cart WHERE (user_id IS NULL OR user_id=0) AND product_id='$p_id'";
-            
-        $check_res = mysqli_query($conn, $check_query);
-        
-        if ($check_res && mysqli_num_rows($check_res) > 0) {
-            $row = mysqli_fetch_assoc($check_res);
-            $cart_id = $row['id'];
-            mysqli_query($conn, "UPDATE cart SET quantity = quantity + 1 WHERE id='$cart_id'");
+        // Check if product already in cart
+        if ($user_id) {
+            $check_stmt = $conn->prepare("SELECT id, quantity FROM cart WHERE user_id = ? AND product_id = ?");
+            $check_stmt->bind_param("ii", $user_id, $p_id);
         } else {
-            $insert_query = $user_id
-                ? "INSERT INTO cart (user_id, product_id, quantity) VALUES ('$user_id', '$p_id', 1)"
-                : "INSERT INTO cart (user_id, product_id, quantity) VALUES (NULL, '$p_id', 1)";
-            mysqli_query($conn, $insert_query);
+            $check_stmt = $conn->prepare("SELECT id, quantity FROM cart WHERE user_id IS NULL AND product_id = ?");
+            $check_stmt->bind_param("i", $p_id);
         }
+        
+        $check_stmt->execute();
+        $check_result = $check_stmt->get_result();
+        
+        if ($check_result && $check_result->num_rows > 0) {
+            $row = $check_result->fetch_assoc();
+            $cart_id = $row['id'];
+            
+            $update_stmt = $conn->prepare("UPDATE cart SET quantity = quantity + 1 WHERE id = ?");
+            $update_stmt->bind_param("i", $cart_id);
+            $update_stmt->execute();
+            $update_stmt->close();
+        } else {
+            $insert_stmt = $conn->prepare("INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, 1)");
+            $insert_stmt->bind_param("ii", $user_id, $p_id);
+            $insert_stmt->execute();
+            $insert_stmt->close();
+        }
+        $check_stmt->close();
     }
     header("Location: cart.php");
     exit();
 }
 
-// 2. FETCH ALL CART ITEMS (Guest + Logged In)
+// 2. FETCH ALL CART ITEMS (SECURE - prepared statement)
 $total_bill = 0;
 $cart_items = [];
 
 if (isset($conn)) {
     if ($user_id) {
-        $query = "SELECT c.id AS cart_id, c.quantity, p.name, p.price, p.image 
-                  FROM cart c 
-                  JOIN products p ON c.product_id = p.id 
-                  WHERE c.user_id = '$user_id' OR c.user_id IS NULL OR c.user_id = 0";
+        $query_stmt = $conn->prepare(
+            "SELECT c.id AS cart_id, c.quantity, p.id AS product_id, p.name, p.price, p.image 
+             FROM cart c 
+             JOIN products p ON c.product_id = p.id 
+             WHERE c.user_id = ?"
+        );
+        $query_stmt->bind_param("i", $user_id);
     } else {
-        $query = "SELECT c.id AS cart_id, c.quantity, p.name, p.price, p.image 
-                  FROM cart c 
-                  JOIN products p ON c.product_id = p.id";
+        $query_stmt = $conn->prepare(
+            "SELECT c.id AS cart_id, c.quantity, p.id AS product_id, p.name, p.price, p.image 
+             FROM cart c 
+             JOIN products p ON c.product_id = p.id 
+             WHERE c.user_id IS NULL"
+        );
     }
     
-    $res = mysqli_query($conn, $query);
+    $query_stmt->execute();
+    $res = $query_stmt->get_result();
+    
     if ($res) {
-        while ($row = mysqli_fetch_assoc($res)) {
+        while ($row = $res->fetch_assoc()) {
             $cart_items[] = $row;
         }
     }
+    $query_stmt->close();
 }
 ?>
 <!DOCTYPE html>
